@@ -9,9 +9,24 @@ import datetime
 template_dir = os.path.abspath('/var/www/appsdir/templates')
 linksdb = os.path.abspath('/var/www/appsdir/links.db')
 app = Flask(__name__, template_folder=template_dir)
+# Category colors configuration - ordered list of colors
+CATEGORY_COLORS = [
+    "#9e9e9e",  # Gray (for "None" or first category)
+    "#2196f3",  # Blue
+    "#4caf50",  # Green
+    "#ff9800",  # Orange
+    "#f44336",  # Red
+    "#9c27b0",  # Purple (extra color for future use)
+    "#00bcd4",  # Cyan (extra color for future use)
+    "#ffeb3b",  # Yellow (extra color for future use)
+]
+# Default category (first in the database)
+DEFAULT_CATEGORY_INDEX = 0
+# Add predefined categories
+CATEGORIES_LIST = ["None", "Internal", "Development", "Production", "External"]
 
 # Database setup
-def init_db():
+def init_db(categories):
     """
     Initialize the database with tables and categories.
     Creates the database if it doesn't exist or adds necessary tables/columns if it does.
@@ -21,8 +36,6 @@ def init_db():
     c = conn.cursor()
     # Create tables if database is new
     if not db_exists:
-        # Add predefined categories
-        categories = ["None", "Internal", "Development", "Production", "External"]
         # Create links table
         c.execute('''
             CREATE TABLE links
@@ -62,34 +75,32 @@ def init_db():
     conn.close()
 
 # Initialize the database
-init_db()
+init_db(categories=CATEGORIES_LIST)
 
 @app.route('/')
 def index():
     # Get sorting and filtering parameters
     sort_by = request.args.get('sort', 'oldest')
     category_filter = request.args.get('category', 'all')
-    # Define a whitelist of allowed sort options and their corresponding SQL clauses
+    # Define allowed sort options
     allowed_sort_options = {
         'newest': 'links.created_at DESC',
         'oldest': 'links.created_at ASC',
         'az': 'links.url ASC',
         'za': 'links.url DESC'
     }
-    # Use the whitelist to get the appropriate ORDER BY clause
-    # Default to 'oldest' if an invalid option is provided
     order_clause = allowed_sort_options.get(sort_by, allowed_sort_options['oldest'])
     # Connect to database
     conn = sqlite3.connect(linksdb)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     # Get all categories for the dropdown
-    c.execute('SELECT * FROM categories ORDER BY name')
-    categories = c.fetchall()
+    c.execute('SELECT * FROM categories ORDER BY id')  # Order by ID to match colors
+    categories = list(c.fetchall())
     # Build query based on category filter
     if category_filter != 'all' and category_filter.isdigit():
         c.execute(f'''
-            SELECT links.*, categories.name as category_name 
+            SELECT links.*, categories.name as category_name, categories.id as category_id
             FROM links 
             LEFT JOIN categories ON links.category_id = categories.id
             WHERE links.category_id = ?
@@ -97,19 +108,26 @@ def index():
         ''', (category_filter,))
     else:
         c.execute(f'''
-            SELECT links.*, categories.name as category_name 
+            SELECT links.*, categories.name as category_name, categories.id as category_id
             FROM links 
             LEFT JOIN categories ON links.category_id = categories.id
             ORDER BY {order_clause}
         ''')
-    
     links = c.fetchall()
     conn.close()
+    # Create a dictionary mapping category IDs to colors
+    category_colors = {}
+    for i, category in enumerate(categories):
+        color_index = min(i, len(CATEGORY_COLORS) - 1)  # Prevent index out of range
+        category_colors[category['id']] = CATEGORY_COLORS[color_index]
     return render_template('index.html', 
                           links=links, 
                           categories=categories,
+                          category_colors=category_colors,
                           current_sort=sort_by,
-                          current_category=category_filter)
+                          current_category=category_filter,
+                          default_category_index=DEFAULT_CATEGORY_INDEX)
+
 
 @app.route('/add', methods=['POST'])
 def add_link():
