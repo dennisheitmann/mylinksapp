@@ -12,53 +12,111 @@ app = Flask(__name__, template_folder=template_dir)
 
 # Database setup
 def init_db():
-    if not os.path.exists(linksdb):
-        conn = sqlite3.connect(linksdb)
-        c = conn.cursor()
+    """
+    Initialize the database with tables and categories.
+    Creates the database if it doesn't exist or adds necessary tables/columns if it does.
+    """
+    db_exists = os.path.exists(linksdb)
+    conn = sqlite3.connect(linksdb)
+    c = conn.cursor()
+    # Create tables if database is new
+    if not db_exists:
+        # Add predefined categories
+        categories = ["None", "Internal", "Development", "Production", "External"]
+        # Create links table
         c.execute('''
             CREATE TABLE links
             (id INTEGER PRIMARY KEY AUTOINCREMENT,
              url TEXT NOT NULL,
              description TEXT,
-             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)
+             category_id INTEGER,
+             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+             FOREIGN KEY (category_id) REFERENCES categories (id))
         ''')
-        conn.commit()
-        conn.close()
+        # Create categories table
+        c.execute('''
+            CREATE TABLE categories
+            (id INTEGER PRIMARY KEY AUTOINCREMENT,
+             name TEXT NOT NULL UNIQUE)
+        ''')
+        for category in categories:
+            c.execute("INSERT INTO categories (name) VALUES (?)", (category,))
+    else:
+        # Check if categories table exists
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='categories'")
+        if not c.fetchone():
+            # Create categories table
+            c.execute('''
+                CREATE TABLE categories
+                (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 name TEXT NOT NULL UNIQUE)
+            ''')
+            for category in categories:
+                c.execute("INSERT INTO categories (name) VALUES (?)", (category,))
+        # Check if category_id column exists in links table
+        c.execute("PRAGMA table_info(links)")
+        columns = [info[1] for info in c.fetchall()]
+        if 'category_id' not in columns:
+            c.execute("ALTER TABLE links ADD COLUMN category_id INTEGER REFERENCES categories(id)")
+    conn.commit()
+    conn.close()
 
 # Initialize the database
 init_db()
 
 @app.route('/')
 def index():
-    # Get sorting parameter from query string, default to 'newest'
-    sort_by = request.args.get('sort', 'newest')
+    # Get sorting and filtering parameters
+    sort_by = request.args.get('sort', 'oldest')
+    category_filter = request.args.get('category', 'all')
     # Define a whitelist of allowed sort options and their corresponding SQL clauses
     allowed_sort_options = {
-        'newest': 'created_at DESC',
-        'oldest': 'created_at ASC',
-        'az': 'url ASC',
-        'za': 'url DESC'
+        'newest': 'links.created_at DESC',
+        'oldest': 'links.created_at ASC',
+        'az': 'links.url ASC',
+        'za': 'links.url DESC'
     }
     # Use the whitelist to get the appropriate ORDER BY clause
-    # Default to 'newest' if an invalid option is provided
-    order_clause = allowed_sort_options.get(sort_by, allowed_sort_options['newest'])
-    # Get all links from the database with the specified ordering
+    # Default to 'oldest' if an invalid option is provided
+    order_clause = allowed_sort_options.get(sort_by, allowed_sort_options['oldest'])
+    # Connect to database
     conn = sqlite3.connect(linksdb)
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute(f'SELECT * FROM links ORDER BY {order_clause}')
+    # Get all categories for the dropdown
+    c.execute('SELECT * FROM categories ORDER BY name')
+    categories = c.fetchall()
+    # Build query based on category filter
+    if category_filter != 'all' and category_filter.isdigit():
+        c.execute(f'''
+            SELECT links.*, categories.name as category_name 
+            FROM links 
+            LEFT JOIN categories ON links.category_id = categories.id
+            WHERE links.category_id = ?
+            ORDER BY {order_clause}
+        ''', (category_filter,))
+    else:
+        c.execute(f'''
+            SELECT links.*, categories.name as category_name 
+            FROM links 
+            LEFT JOIN categories ON links.category_id = categories.id
+            ORDER BY {order_clause}
+        ''')
+    
     links = c.fetchall()
     conn.close()
-    #print(links)
-    return render_template('index.html', links=links, current_sort=sort_by)
+    return render_template('index.html', 
+                          links=links, 
+                          categories=categories,
+                          current_sort=sort_by,
+                          current_category=category_filter)
 
 @app.route('/add', methods=['POST'])
 def add_link():
-    # Get raw input (url and description)
-    # url = request.form['url']
-    # description = request.form['description']
+    # Get form data
     raw_url = request.form.get('url', '')
     raw_description = request.form.get('description', '')
+    category_id = request.form.get('category_id')
     # URL validation
     if not raw_url:
         # Handle empty URL
@@ -81,21 +139,35 @@ def add_link():
     # Limit length
     if raw_description and len(raw_description) > 250:  # Set appropriate max length
         raw_description = raw_description[:250]
-    # Strip HTML tags
-    # This is a very basic approach
+    # Strip HTML tags (simple approach)
     description = re.sub(r'<[^>]*>', '', raw_description)
-    # Timestamp
+    # Convert category_id to integer or None
+    if category_id and category_id.isdigit():
+        category_id = int(category_id)
+    else:
+        # Find the ID of the "None" category
+        conn = sqlite3.connect(linksdb)
+        c = conn.cursor()
+        c.execute('SELECT id FROM categories WHERE name = "None"')
+        result = c.fetchone()
+        conn.close()
+        if result:
+            category_id = result[0]
+        else:
+            category_id = None
+    # Create Timestamp
     current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    # Save to database
+    # Save to database with category
     conn = sqlite3.connect(linksdb)
     c = conn.cursor()
-    c.execute('INSERT INTO links (url, description, created_at) VALUES (?, ?, ?)', 
-              (url, description, current_time))
+    c.execute('INSERT INTO links (url, description, category_id, created_at) VALUES (?, ?, ?, ?)', 
+              (url, description, category_id, current_time))
     conn.commit()
     conn.close()
-    # Preserve the current sorting when redirecting
-    sort_by = request.form.get('sort', 'newest')
-    return redirect(url_for('index', sort=sort_by))
+    # Preserve the current sorting and category when redirecting
+    sort_by = request.form.get('sort', 'oldest')
+    category_filter = request.form.get('category', 'all')
+    return redirect(url_for('index', sort=sort_by, category=category_filter))
 
 @app.route('/delete/<int:link_id>', methods=['POST'])
 def delete_link(link_id):
@@ -105,9 +177,10 @@ def delete_link(link_id):
     c.execute('DELETE FROM links WHERE id = ?', (link_id,))
     conn.commit()
     conn.close()
-    # Preserve the current sorting when redirecting
-    sort_by = request.form.get('sort', 'newest')
-    return redirect(url_for('index', sort=sort_by))
+    # Preserve the current sorting and category when redirecting
+    sort_by = request.form.get('sort', 'oldest')
+    category_filter = request.form.get('category', 'all')
+    return redirect(url_for('index', sort=sort_by, category=category_filter))
 
 if __name__ == '__main__':
     # Run on the specified host and port
