@@ -103,12 +103,6 @@
             color: white;
         }
         
-        .category-None { background-color: #9e9e9e; }
-        .category-Internal { background-color: #2196f3; }
-        .category-Development { background-color: #ff9800; }
-        .category-Production { background-color: #4caf50; }
-        .category-External { background-color: #f44336; }
-        
         .controls-container {
             display: flex;
             justify-content: space-between;
@@ -144,12 +138,12 @@
         </div>
     </div>
     
-    {% if links %}
+{% if links %}
         {% for link in links %}
             <div class="link-item">
                 <a href="{{ link.url }}" target="_blank">{{ link.url }}</a>
                 {% if link.category_name %}
-                    <span class="category-badge category-{{ link.category_name }}">{{ link.category_name }}</span>
+                    <span class="category-badge" style="background-color: {{ category_colors[link.category_id] }}">{{ link.category_name }}</span>
                 {% endif %}
                 {% if link.description %}
                     <p class="description">{{ link.description }}</p>
@@ -179,7 +173,7 @@
             <label for="category_id">Category:</label>
             <select id="category_id" name="category_id">
                 {% for category in categories %}
-                    <option value="{{ category.id }}" {% if category.name == 'None' %}selected{% endif %}>{{ category.name }}</option>
+                    <option value="{{ category.id }}" {% if loop.index0 == default_category_index %}selected{% endif %}>{{ category.name }}</option>
                 {% endfor %}
             </select>
         </div>
