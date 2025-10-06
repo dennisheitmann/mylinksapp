@@ -1,6 +1,7 @@
 import os
 import re
 from urllib.parse import urlparse
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask import Flask, render_template, request, redirect, url_for, abort
 import sqlite3
 import datetime
@@ -9,6 +10,8 @@ import datetime
 template_dir = os.path.abspath('/var/www/appsdir/templates')
 linksdb = os.path.abspath('/var/www/appsdir/links.db')
 app = Flask(__name__, template_folder=template_dir)
+app.config['SECRET_KEY'] = secrets.token_hex(32)  # 32 bytes = 256 bits
+csrf = CSRFProtect(app)
 # Category colors configuration - ordered list of colors
 CATEGORY_COLORS = [
     "#9e9e9e",  # Gray (for "None" or first category)
@@ -76,6 +79,11 @@ def init_db(categories):
 
 # Initialize the database
 init_db(categories=CATEGORIES_LIST)
+
+# Error handler for CSRF failures
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    return redirect(url_for('index', error="Security verification failed. Please try again."))
 
 @app.route('/')
 def index():
