@@ -13,8 +13,8 @@ app = Flask(__name__, template_folder=template_dir)
 CATEGORY_COLORS = [
     "#9e9e9e",  # Gray (for "None" or first category)
     "#2196f3",  # Blue
-    "#4caf50",  # Green
     "#ff9800",  # Orange
+    "#4caf50",  # Green
     "#f44336",  # Red
     "#9c27b0",  # Purple (extra color for future use)
     "#00bcd4",  # Cyan (extra color for future use)
