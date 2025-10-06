@@ -30,15 +30,16 @@ init_db()
 def index():
     # Get sorting parameter from query string, default to 'newest'
     sort_by = request.args.get('sort', 'newest')
-    # Determine the ORDER BY clause based on the sort parameter
-    if sort_by == 'oldest':
-        order_clause = 'created_at ASC'
-    elif sort_by == 'az':
-        order_clause = 'url ASC'
-    elif sort_by == 'za':
-        order_clause = 'url DESC'
-    else:  # default to newest
-        order_clause = 'created_at DESC'
+    # Define a whitelist of allowed sort options and their corresponding SQL clauses
+    allowed_sort_options = {
+        'newest': 'created_at DESC',
+        'oldest': 'created_at ASC',
+        'az': 'url ASC',
+        'za': 'url DESC'
+    }
+    # Use the whitelist to get the appropriate ORDER BY clause
+    # Default to 'newest' if an invalid option is provided
+    order_clause = allowed_sort_options.get(sort_by, allowed_sort_options['newest'])
     # Get all links from the database with the specified ordering
     conn = sqlite3.connect(linksdb)
     conn.row_factory = sqlite3.Row
