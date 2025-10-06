@@ -1,6 +1,8 @@
-from flask import Flask, render_template, request, redirect, url_for
-import sqlite3
 import os
+import re
+from urllib.parse import urlparse
+from flask import Flask, render_template, request, redirect, url_for, abort
+import sqlite3
 import datetime
 
 # Specify the absolute path to the templates folder
@@ -52,8 +54,37 @@ def index():
 
 @app.route('/add', methods=['POST'])
 def add_link():
-    url = request.form['url']
-    description = request.form['description']
+    # Get raw input (url and description)
+    # url = request.form['url']
+    # description = request.form['description']
+    raw_url = request.form.get('url', '')
+    raw_description = request.form.get('description', '')
+    # URL validation
+    if not raw_url:
+        # Handle empty URL
+        return redirect(url_for('index', error="URL cannot be empty"))
+    # Basic URL validation
+    try:
+        # Parse the URL to check if it's valid
+        parsed_url = urlparse(raw_url)
+        # Check if URL has scheme and netloc (domain)
+        if not all([parsed_url.scheme, parsed_url.netloc]):
+            return redirect(url_for('index', error="Invalid URL format"))
+        # Optional: Whitelist allowed schemes
+        if parsed_url.scheme not in ['http', 'https']:
+            return redirect(url_for('index', error="Only HTTP and HTTPS URLs are allowed"))
+        # Use the parsed and validated URL
+        url = raw_url
+    except Exception:
+        return redirect(url_for('index', error="Invalid URL"))
+    # Description sanitization
+    # Limit length
+    if raw_description and len(raw_description) > 250:  # Set appropriate max length
+        raw_description = raw_description[:250]
+    # Strip HTML tags
+    # This is a very basic approach
+    description = re.sub(r'<[^>]*>', '', raw_description)
+    # Timestamp
     current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     # Save to database
     conn = sqlite3.connect(linksdb)
