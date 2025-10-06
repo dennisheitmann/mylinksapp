@@ -163,10 +163,10 @@ def add_link():
     if category_id and category_id.isdigit():
         category_id = int(category_id)
     else:
-        # Find the ID of the "None" category
+        # Find the ID of the default category (first one)
         conn = sqlite3.connect(linksdb)
         c = conn.cursor()
-        c.execute('SELECT id FROM categories WHERE name = "None"')
+        c.execute('SELECT id FROM categories ORDER BY id LIMIT 1')
         result = c.fetchone()
         conn.close()
         if result:
@@ -183,7 +183,7 @@ def add_link():
     conn.commit()
     conn.close()
     # Preserve the current sorting and category when redirecting
-    sort_by = request.form.get('sort', 'oldest')
+    sort_by = request.form.get('sort', 'newest')
     category_filter = request.form.get('category', 'all')
     return redirect(url_for('index', sort=sort_by, category=category_filter))
 
