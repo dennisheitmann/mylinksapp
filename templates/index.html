@@ -149,6 +149,7 @@
                     <p class="description">{{ link.description }}</p>
                 {% endif %}
                 <form class="delete-form" action="/delete/{{ link.id }}" method="post" onsubmit="return confirm('Are you sure you want to delete this link?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="sort" value="{{ current_sort }}">
                     <input type="hidden" name="category" value="{{ current_category }}">
                     <button type="submit" class="delete-button">Delete</button>
@@ -161,6 +162,7 @@
 
     <form action="/add" method="post">
         <h3>Add a New Link</h3>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div>
             <label for="url">URL:</label>
             <input type="url" id="url" name="url" required placeholder="https://example.com">
@@ -184,3 +186,4 @@
     
 </body>
 </html>
+
