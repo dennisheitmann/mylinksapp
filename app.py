@@ -13,6 +13,7 @@ linksdb = os.path.abspath('/var/www/appsdir/links.db')
 app = Flask(__name__, template_folder=template_dir)
 app.config['SECRET_KEY'] = secrets.token_hex(32)  # 32 bytes = 256 bits
 csrf = CSRFProtect(app)
+
 # Category colors configuration - ordered list of colors
 CATEGORY_COLORS = [
     "#9e9e9e",  # Gray (for "None" or first category)
